@@ -114,7 +114,3 @@ Successful run example:
 - The script expects a **camt.053** input (it checks the root namespace for `camt.053.001.*`).
 - Ordering rules applied are a **subset** focused on the elements the script touches; they’re chosen to avoid common schema/import failures.
 - The `AdrTp` removal is broad (by local element name). If you rely on `AdrTp` somewhere else, review that behavior before using in production.
-
-## License
-
-Choose a license that fits your project (e.g., MIT). If you want, I can generate a ready-to-use `LICENSE` file and add a short “Contributing” section.
