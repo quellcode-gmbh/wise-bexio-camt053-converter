@@ -97,8 +97,9 @@ def _fix_negative_debit_sum(root: ET.Element, ns: str) -> bool:
 # XSD-order sequences (subset used by our edits)
 NTRY_ORDER = [
     "NtryRef", "Amt", "CdtDbtInd", "RvslInd", "Sts", "BookgDt", "ValDt",
-    "AcctSvcrRef", "Avlbty", "BkTxCd", "ComssnWvrInd", "Chrgs", "Intrst",
-    "Card", "NtryDtls", "AddtlNtryInf"
+    "AcctSvcrRef", "Avlbty", "BkTxCd",
+    "ComssnWvrInd", "AddtlInfInd", "AmtDtls",
+    "Chrgs", "Intrst", "Card", "NtryDtls", "AddtlNtryInf"
 ]
 TXDTLS_ORDER = [
     "Refs", "AmtDtls", "Avlbty", "BkTxCd", "Chrgs", "Intrst",
