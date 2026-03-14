@@ -13,6 +13,8 @@ This repository contains a small CLI tool (`wise_camt053_transform.py`) that con
 ### Core transformation
 - Retags the document namespace from **camt.053.001.10** to your chosen target (**v8** or **v4**).
 - Normalizes timestamp strings to a consistent ISO format (fractional seconds truncated to 6 digits where present).
+- Optionally rewrites each statement account identifier at `<Stmt><Acct><Id>` to a single
+  `<IBAN>...</IBAN>` element using the value passed via `--iban`.
 
 ### bexio-oriented fixes
 - Ensures each `<Ntry>` has a `<ValDt><Dt>YYYY-MM-DD</Dt></ValDt>` derived from `<BookgDt>`.
@@ -68,6 +70,15 @@ If `<AddtlNtryInf>` already contains something useful and you still want the WIS
 python wise_camt053_transform.py input.xml --copy-prtry-to-addtlinf --append-prtry
 ```
 
+### Set the statement account IBAN
+If you want the output account identifier under `<Stmt><Acct><Id>` to be a specific IBAN:
+```bash
+python wise_camt053_transform.py input.xml --target 8 --iban CH1234
+```
+
+When provided, `--iban` applies to each `<Stmt>` in the document and replaces any existing
+content inside `<Acct><Id>` with a single `<IBAN>` child containing the supplied value.
+
 ### Validate the output with an XSD (optional)
 ```bash
 python wise_camt053_transform.py input.xml --target 8 --xsd camt.053.001.08.xsd
@@ -87,6 +98,8 @@ python wise_camt053_transform.py input.xml --target 8 --xsd camt.053.001.08.xsd
   Copy `<BkTxCd><Prtry><Cd>…</Cd></Prtry>` into `<AddtlNtryInf>` when needed
 - `--append-prtry`  
   When `--copy-prtry-to-addtlinf` is active: append the code instead of overwriting existing AddtlNtryInf
+- `--iban IBAN`  
+  Set the statement account identifier under `<Stmt><Acct><Id>` to the provided IBAN value
 
 ## Output naming
 
