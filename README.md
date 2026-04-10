@@ -349,10 +349,3 @@ The console output currently shows only a subset of these counters:
 
 ---
 
-## File name note
-Older examples may refer to `wise_camt053_transform_final.py`.  
-The actual script in this repository is:
-
-```bash
-wise_camt053_transform.py
-```
