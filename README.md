@@ -243,7 +243,6 @@ python wise_camt053_transform.py "folder/*.xml" --target 8 --outdir out/ --copy-
 python wise_camt053_transform.py input.xml --copy-prtry-to-addtlinf --append-prtry
 ```
 
-### Validate the output against an XSD
 ### Set the statement account IBAN
 If you want the output account identifier under `<Stmt><Acct><Id>` to be a specific IBAN:
 ```bash
