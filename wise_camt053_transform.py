@@ -19,11 +19,12 @@ Conversion-specific normalization:
 - If the fee is not inferable, existing XML amounts are used as fallback.
 
 Usage:
-  python wise_camt053_transform_final.py input.xml --target 8 --copy-prtry-to-addtlinf
-  python wise_camt053_transform_final.py "folder/*.xml" --target 8 --outdir out/ --copy-prtry-to-addtlinf
+  python wise_camt053_transform.py input.xml --target 8 --copy-prtry-to-addtlinf
+  python wise_camt053_transform.py "folder/*.xml" --target 8 --outdir out/ --copy-prtry-to-addtlinf
+  python wise_camt053_transform.py input.xml --target 8 --iban CH1234
 
 Optional XSD validation (requires lxml):
-  python wise_camt053_transform_final.py input.xml --target 8 --xsd camt.053.001.08.xsd
+  python wise_camt053_transform.py input.xml --target 8 --xsd camt.053.001.08.xsd
 """
 
 from __future__ import annotations
@@ -238,7 +239,6 @@ def _maybe_copy_prtry_to_addtlinf(ntry: ET.Element, ns: str, *, append_if_presen
         add.text = f"{cur} | {pr_cd}"
         return True
     return False
-
 
 def _find_direct(parent: ET.Element | None, ns: str, local_name: str) -> ET.Element | None:
     if parent is None:
@@ -558,6 +558,35 @@ def _normalize_conversion_amtdtls(ntry: ET.Element, ns: str, fee_map: dict[tuple
     return changed
 
 
+def _set_stmt_account_iban(root: ET.Element, ns: str, iban: str) -> int:
+    changed = 0
+    for stmt in root.findall(f".//{{{ns}}}Stmt"):
+        acct = stmt.find(f"{{{ns}}}Acct")
+        if acct is None:
+            continue
+        acct_id = acct.find(f"{{{ns}}}Id")
+        if acct_id is None:
+            acct_id = ET.Element(f"{{{ns}}}Id")
+            acct.insert(0, acct_id)
+        closing_ws = acct_id.tail if acct_id.tail and not acct_id.tail.strip() else "\n"
+        child_ws = closing_ws + "    "
+        iban_el = acct_id.find(f"{{{ns}}}IBAN")
+        if (
+            iban_el is not None
+            and len(list(acct_id)) == 1
+            and (iban_el.text or "").strip() == iban
+            and acct_id.text == child_ws
+            and iban_el.tail == closing_ws
+        ):
+            continue
+        acct_id[:] = []
+        acct_id.text = child_ws
+        iban_el = ET.SubElement(acct_id, f"{{{ns}}}IBAN")
+        iban_el.text = iban
+        iban_el.tail = closing_ws
+        changed += 1
+    return changed
+
 def _validate_with_xsd(xml_path: Path, xsd_path: Path) -> tuple[bool, list[str]]:
     try:
         import lxml.etree as LET
@@ -574,9 +603,13 @@ def _validate_with_xsd(xml_path: Path, xsd_path: Path) -> tuple[bool, list[str]]
     return ok, errs
 
 
-def transform_tree(tree: ET.ElementTree, target_version: int, *, copy_prtry_to_addtlinf: bool, append_if_present: bool) -> dict:
+def transform_tree(tree: ET.ElementTree, target_version: int, *, copy_prtry_to_addtlinf: bool, append_if_present: bool, iban: str | None = None) -> dict:
     if target_version not in (4, 8):
         raise ValueError("target_version must be 4 or 8")
+    if iban is not None:
+        iban = iban.strip().upper()
+        if iban == "":
+            iban = None
     root = tree.getroot()
     old_ns = _get_default_ns(root)
     if "camt.053.001." not in old_ns:
@@ -602,6 +635,7 @@ def transform_tree(tree: ET.ElementTree, target_version: int, *, copy_prtry_to_a
 
     adr_tp_removed = _remove_elements_by_localname(root, "AdrTp")
     debit_sum_fixed = _fix_negative_debit_sum(root, new_ns)
+    stmt_iban_set = _set_stmt_account_iban(root, new_ns, iban) if iban else 0
 
     valdt_added = 0
     bktxcd_fixed = 0
@@ -649,6 +683,7 @@ def transform_tree(tree: ET.ElementTree, target_version: int, *, copy_prtry_to_a
         "timestamps_normalized": dt_changed,
         "AdrTp_removed": adr_tp_removed,
         "debit_sum_fixed": debit_sum_fixed,
+        "stmt_account_iban_set": stmt_iban_set,
         "valdt_added_on_entries": valdt_added,
         "bktxcd_fixed_on_entries": bktxcd_fixed,
         "bktxcd_fixed_on_txdtls": tx_bktxcd_fixed,
@@ -675,6 +710,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("--xsd", type=str, default=None)
     ap.add_argument("--copy-prtry-to-addtlinf", action="store_true")
     ap.add_argument("--append-prtry", action="store_true")
+    ap.add_argument("--iban", type=str, default=None)
     return ap.parse_args(argv)
 
 
@@ -710,6 +746,7 @@ def main(argv: list[str]) -> int:
                 tree, args.target,
                 copy_prtry_to_addtlinf=args.copy_prtry_to_addtlinf,
                 append_if_present=args.append_prtry,
+                iban=args.iban,
             )
             outfile = Path(args.out) if args.out else _default_outfile(infile, args.target)
             if outdir and not args.out:
@@ -724,6 +761,7 @@ def main(argv: list[str]) -> int:
             print(
                 f"[OK] {infile.name} -> {outfile.name}{valid_txt} | "
                 f"ConvFix={report['conversion_amtdtls_fixed']}, "
+                f"StmtIBAN={report['stmt_account_iban_set']}, "
                 f"AddtlNtryInf*={report['addtl_ntryinf_changed']}, "
                 f"ValDt+={report['valdt_added_on_entries']}"
             )
