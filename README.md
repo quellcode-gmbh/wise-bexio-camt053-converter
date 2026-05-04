@@ -11,8 +11,27 @@ This repository contains a small CLI tool, `wise_camt053_transform.py`, for conv
 - bexio often expects **camt.053.001.08** and may also accept **camt.053.001.04**.
 - CAMT XML is **schema-order-sensitive**: valid-looking XML can still fail import or validation if child elements appear in the wrong order.
 - WISE conversion entries can contain multi-currency amount structures that need cleanup so the imported data in bexio remains meaningful.
+- Recent WISE exports may identify conversion-related entries either as `CONVERSION_ORDER-*` / `FEE-CONVERSION_ORDER-*` or as `BALANCE-*` / `FEE-BALANCE-*`; the transformer handles both variants.
 
 ---
+
+## Update note: WISE `BALANCE-*` conversion references
+
+WISE appears to use more than one proprietary reference pattern for currency conversions. Older exports can contain conversion entries such as:
+
+```text
+CONVERSION_ORDER-4408792
+FEE-CONVERSION_ORDER-4408792
+```
+
+Newer exports can contain equivalent conversion entries such as:
+
+```text
+BALANCE-5160975431
+FEE-BALANCE-5160975431
+```
+
+The current transformer treats both patterns as FX/conversion entries. This is important because the conversion-specific `<AmtDtls>` normalization must also run for `BALANCE-*` entries, not only for `CONVERSION_ORDER-*` entries. The fee map also recognises both `FEE-CONVERSION_ORDER-*` and `FEE-BALANCE-*`, so separately booked WISE conversion fees can still be reflected in the net source amount where possible.
 
 ## What the tool does
 
@@ -112,12 +131,14 @@ The script applies explicit order rules for:
 ---
 
 ## 5) FX / conversion amount normalization
-The script contains special handling for WISE conversion entries, especially entries whose proprietary code starts with:
+The script contains special handling for WISE conversion entries. It recognises both currently observed WISE proprietary conversion-reference patterns:
 
 - `CONVERSION_ORDER-...`
-- and related fee entries `FEE-CONVERSION_ORDER-...`
+- related fee entries `FEE-CONVERSION_ORDER-...`
+- `BALANCE-...`
+- related fee entries `FEE-BALANCE-...`
 
-This logic is intended to preserve the meaning of conversion amounts when importing into bexio.
+This logic is intended to preserve the meaning of conversion amounts when importing into bexio. The `BALANCE-*` handling is especially relevant for newer WISE exports where the conversion itself is no longer labelled as `CONVERSION_ORDER-*`, even though the XML still represents a currency conversion.
 
 ### What is normalized
 For conversion entries, the script may adjust `<AmtDtls>` so that:
@@ -134,7 +155,7 @@ For conversion entries, the script may adjust `<AmtDtls>` so that:
   - conversion text in `<AddtlNtryInf>` such as  
     `Converted 100.00 EUR to 95.00 CHF (fee: 0.50 EUR)`
   - and separate fee entries like  
-    `FEE-CONVERSION_ORDER-...`
+    `FEE-CONVERSION_ORDER-...` or `FEE-BALANCE-...`
 
 ### Source-account side
 For a source-currency debit entry, for example an **EUR account** entry representing an **EUR → CHF** conversion:
@@ -360,7 +381,7 @@ The console output currently shows only a subset of these counters:
   - existing amount structures
   - existing `CcyXchg`
   - `AddtlNtryInf` conversion text
-  - and/or matching `FEE-CONVERSION_ORDER-*` entries
+  - and/or matching `FEE-CONVERSION_ORDER-*` / `FEE-BALANCE-*` entries
 - `AdrTp` removal is intentionally broad and works by local element name.
 - XSD validation is optional and only performed if `--xsd` is given.
 

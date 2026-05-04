@@ -326,29 +326,55 @@ def _parse_conversion_text(text: str | None):
     }
 
 
-def _is_conversion_entry(ntry: ET.Element, ns: str) -> bool:
-    pr = _get_prtry_cd(ntry, ns) or ""
-    return pr.upper().startswith("CONVERSION_ORDER")
+# Wise has used different proprietary BkTxCd/Prtry codes for FX conversions.
+# Older exports commonly use CONVERSION_ORDER-* while newer exports may use
+# BALANCE-* for the same logical conversion. Treat both as conversion entries.
+_CONVERSION_PRTRY_PREFIXES = ("CONVERSION_ORDER-", "BALANCE-")
+_FEE_CONVERSION_PRTRY_PREFIXES = tuple(f"FEE-{p}" for p in _CONVERSION_PRTRY_PREFIXES)
 
 
-def _conversion_order_ref_from_prtry(prtry_cd: str | None) -> str | None:
+def _normalized_conversion_ref_from_prtry(prtry_cd: str | None) -> str | None:
+    """Return the Wise conversion reference without a leading FEE-, if applicable.
+
+    Examples:
+      CONVERSION_ORDER-4408792     -> CONVERSION_ORDER-4408792
+      FEE-CONVERSION_ORDER-4408792 -> CONVERSION_ORDER-4408792
+      BALANCE-5160975431          -> BALANCE-5160975431
+      FEE-BALANCE-5160975431      -> BALANCE-5160975431
+    """
     if not prtry_cd:
         return None
     pr = prtry_cd.strip().upper()
-    if pr.startswith("FEE-CONVERSION_ORDER-"):
-        return pr[len("FEE-"):]
-    if pr.startswith("CONVERSION_ORDER-"):
+    if pr.startswith("FEE-"):
+        pr = pr[len("FEE-"):]
+    if pr.startswith(_CONVERSION_PRTRY_PREFIXES):
         return pr
     return None
+
+
+def _is_conversion_entry(ntry: ET.Element, ns: str) -> bool:
+    pr = (_get_prtry_cd(ntry, ns) or "").strip().upper()
+    # Fee entries are separate booking lines and must not be normalized as the
+    # conversion itself. They are only used by _build_conversion_fee_map().
+    return (
+        pr.startswith(_CONVERSION_PRTRY_PREFIXES)
+        and not pr.startswith("FEE-")
+    )
+
+
+def _conversion_order_ref_from_prtry(prtry_cd: str | None) -> str | None:
+    # Backwards-compatible wrapper: older code/comments refer to
+    # "conversion order", but the function now also supports BALANCE-* refs.
+    return _normalized_conversion_ref_from_prtry(prtry_cd)
 
 
 def _build_conversion_fee_map(root: ET.Element, ns: str) -> dict[tuple[str, str], Decimal]:
     fees: dict[tuple[str, str], Decimal] = {}
     for ntry in root.findall(f".//{{{ns}}}Stmt/{{{ns}}}Ntry"):
-        pr = _get_prtry_cd(ntry, ns)
-        if not pr or not pr.upper().startswith("FEE-CONVERSION_ORDER-"):
+        pr = (_get_prtry_cd(ntry, ns) or "").strip().upper()
+        if not pr.startswith(_FEE_CONVERSION_PRTRY_PREFIXES):
             continue
-        order_ref = _conversion_order_ref_from_prtry(pr)
+        order_ref = _normalized_conversion_ref_from_prtry(pr)
         amt_el = _find_direct(ntry, ns, "Amt")
         if order_ref is None or amt_el is None or not amt_el.text:
             continue
@@ -453,7 +479,7 @@ def _normalize_conversion_amtdtls(ntry: ET.Element, ns: str, fee_map: dict[tuple
     def net_src_amount() -> Decimal | None:
         if parsed and parsed["src_ccy"] == src_ccy:
             net = parsed["net_src_amt"]
-            # Wise often emits the fee as a separate FEE-CONVERSION_ORDER-* entry
+            # Wise often emits the fee as a separate FEE-<conversion-ref> entry
             # instead of embedding it in the conversion text. Only subtract it here
             # if the text itself did not already contain a same-currency fee.
             parsed_fee_same_ccy = bool(parsed.get("fee_amt") is not None and parsed.get("fee_ccy") == src_ccy)
