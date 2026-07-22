@@ -7,8 +7,7 @@ This repository contains a small CLI tool, `wise_camt053_transform.py`, for conv
 
 ## Why this exists
 
-- WISE exports bank statements as **camt.053.001.10**.
-- bexio often expects **camt.053.001.08** and may also accept **camt.053.001.04**.
+- UPDATE July 2026: Although WISE now explicitly allows to select bexio as target for the bank statement export (in format **camt.053.001.08** or **camt.053.001.08** as supported by bexio), the resulting files lack support for several features such as correct handling of currency conversion.
 - CAMT XML is **schema-order-sensitive**: valid-looking XML can still fail import or validation if child elements appear in the wrong order.
 - WISE conversion entries can contain multi-currency amount structures that need cleanup so the imported data in bexio remains meaningful.
 - Recent WISE exports may identify conversion-related entries either as `CONVERSION_ORDER-*` / `FEE-CONVERSION_ORDER-*` or as `BALANCE-*` / `FEE-BALANCE-*`; the transformer handles both variants.
